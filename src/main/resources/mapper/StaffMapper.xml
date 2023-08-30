@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.tang.course.mapper.StaffMapper">
+    <select id="selectList" resultType="com.tang.course.pojo.Staff">
+        select id,name,grade,countWork,subject from dept_staff
+    </select>
+
+    <select id="selectByName" resultType="com.tang.course.pojo.Staff">
+        select id,name,grade,countWork,subject from dept_staff where name = #{name}
+    </select>
+</mapper>
