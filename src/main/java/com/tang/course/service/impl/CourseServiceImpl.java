@@ -9,15 +9,11 @@ import com.tang.course.service.CourseService;
 import com.tang.course.utils.Utils;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.Resource;
-import org.apache.poi.ss.usermodel.Cell;
-import org.apache.poi.ss.usermodel.Sheet;
-import org.apache.poi.ss.usermodel.Workbook;
 import org.apache.poi.xssf.usermodel.XSSFCell;
 import org.apache.poi.xssf.usermodel.XSSFSheet;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.springframework.stereotype.Service;
 import java.io.FileInputStream;
-import java.io.FileOutputStream;
 import java.io.IOException;
 import java.util.*;
 
@@ -50,11 +46,10 @@ public class CourseServiceImpl implements CourseService {
     *   用来扫描Excel
     *   扫描课表
     * */
-    public void scanFiles() throws IOException {
-        XSSFWorkbook xssfWorkbook = new XSSFWorkbook(new FileInputStream("C:\\Users\\Administrator\\Desktop\\mode.xlsx"));
+    public void scanFiles(String path) throws IOException {
+        XSSFWorkbook xssfWorkbook = new XSSFWorkbook(new FileInputStream(path));
         int sheetNum = xssfWorkbook.getNumberOfSheets();
         HashMap<Integer , Integer> mappingDay = initDayMapping();
-        HashMap<String, Staff> allPeopleInfo = Course.allPeopleInfo;;
         for(int i = 0;i<sheetNum - 1 ;i++) {
             XSSFSheet sheet = xssfWorkbook.getSheetAt(i);
             String sheetName = sheet.getSheetName();
@@ -63,7 +58,6 @@ public class CourseServiceImpl implements CourseService {
             // 初始化部门成员的ID 和 年级 ;
             staff.setFreeTime(new ArrayList<Integer>());
             staff.setWorkId(new ArrayList<>());
-//            System.out.println(sheetName);
             Staff selectOne = staffMapper.selectByName(sheetName);
             staff.setCountWork(selectOne.getCountWork());
             staff.setId(selectOne.getId());
@@ -80,6 +74,7 @@ public class CourseServiceImpl implements CourseService {
             List<Integer> freeTime = null;
             List<String> sophomore = null;
             List<String> junior = null;
+            System.out.println(" 正在扫描 : " + sheetName + " 的课表");
             for (int row = 3; row <= 7; row++) {
                 int maxRol = sheet.getRow(row).getLastCellNum();
                 for (int col = 2 ; col < maxRol; col++) {
@@ -87,11 +82,11 @@ public class CourseServiceImpl implements CourseService {
                         int workId = mappingDay.get(col);
                         workId += (row - 3 ) * 7 ;
                         // 跳过周末班
-                        if( workId != 0 && (workId % 7 == 6 || workId % 7 == 5))continue;
+                        if( workId % 7 == 6 || workId % 7 == 5)continue;
                         // 获取这一行的信息
                         XSSFCell cell = sheet.getRow(row).getCell(col);
                         // 这一班没有课的人
-                        if (cell == null || cell.toString().length() == 0) {
+                        if (cell == null || cell.toString().length() <= 1) {
                             // 没课对应的学生还没创建出来?
                             if(Course.noCourseStaffId.containsKey(workId)){
                                 strings = Course.noCourseStaffId.get(workId);
@@ -122,7 +117,6 @@ public class CourseServiceImpl implements CourseService {
                             strings.add(sheetName);
                             Course.noCourseStaffId.put(workId , strings);
                             // 空闲时间表
-//                            System.out.println(Course.allPeopleInfo.get(sheetName));
                             freeTime = Course.allPeopleInfo.get(sheetName).getFreeTime();
                             freeTime.add(workId);
                         }
@@ -131,26 +125,17 @@ public class CourseServiceImpl implements CourseService {
             }
         }
         xssfWorkbook.close();
-//        HashMap<Integer, List<String>> noCourseStaffId = Course.noCourseStaffId;
-//
-//        for(Map.Entry<Integer , List<String>> entry : noCourseStaffId.entrySet()){
-//            System.out.print( " 周 " + (entry.getKey() % 7 + 1 ) + " 第 " + (entry.getKey() / 7 + 1 ) + "班 ， 无课学生有 ");
-//            for(String name : entry.getValue()){
-//                System.out.print(" " + name);
-//            }
-//            System.out.println();
-//        }
 
-        // 已经统计完成课表 星期1 - 5
-
-//        System.out.println("结束啦 !!!!!!!!!! ");
     }
 
     private int max = 0 ;
 
     private HashMap<Integer , String> tmpEverySophomoreWork = new HashMap<>();
     private HashMap<Integer , String> everySophomoreWork = new HashMap<>();
-
+/*
+*   这个算法更公平，但是时间复杂度更高，大二人超过 20 人时 ， 算的很慢 , 达到较高的指数级别
+*
+* */
     public void dfsSortCourseSophomore( int curworkId  , int curMax ){
 
         // 如果当前课表已经达到35说明已经安排完了 ， 也不能是周末
@@ -191,6 +176,35 @@ public class CourseServiceImpl implements CourseService {
             }
             dfsSortCourseSophomore( curworkId + 1,  curMax );
         }
+    }
+    /*
+    *   采用一种比较不是很靠谱的安排方法
+    * */
+    public void planToCourseSphone(){
+        // 1.首先要排某一个班人数比较少的，要先进行关照
+        List<Map.Entry<Integer, List<String>>> sortedEntries = Course.Sophomore.entrySet()
+                .stream()
+                .sorted(Comparator.comparing(entry -> entry.getValue().size())).toList();
+
+        for(Map.Entry<Integer , List<String>> entry : sortedEntries){
+
+            int workId = entry.getKey();
+            List<String> names = entry.getValue();
+
+            // 进行洗牌 ， 打乱顺序性
+            Utils.shuffleString(names);
+            for(int i = 0 ; i < names.size() ; i++ ){
+                // 没有安排满 ，且今天没有班 ，且没有相同班级的人
+                if(Utils.fullShift(names.get(i)) && checkTodayHasWork(names.get(i) , workId) && Utils.sameProfessionalClass(names.get(i), workId)){
+                    tmpEverySophomoreWork.put(workId , names.get(i));
+                    Utils.theNumberOfShiftsMinusOne(names.get(i));
+                    break;
+                }
+
+            }
+
+        }
+        everySophomoreWork.putAll(tmpEverySophomoreWork);
     }
 
     /*
@@ -240,22 +254,26 @@ public class CourseServiceImpl implements CourseService {
             everySophomoreWork.putAll(tmpEverySophomoreWork);
             max = curMax;
         }
-        if(curWorkId != 0 && (curWorkId % 6 == 0 || curWorkId % 5 == 0)){
+        if(curWorkId % 7 == 5 || curWorkId % 7 == 6){
             dfsSortCourseJunior( ++curWorkId , curMax);
             return;
         }
         // 从 curWork - 35 之间进行枚举，得到最好的结果
         // 第curworkId班选第 j 个学生的方案
-        if(Course.Junior.get(curWorkId) == null){
+        if(!Course.Junior.containsKey(curWorkId)){
             dfsSortCourseJunior(++curWorkId , curMax);
             return;
         }
         for(int j = 0 ; j < Course.Junior.get(curWorkId).size() ; j++){
+            // 这一班已经有人了
             if(Course.getCourseMappingStaff.get(curWorkId) != null && Course.getCourseMappingStaff.get(curWorkId).size() != 0){
                 dfsSortCourseJunior(curWorkId + 1 , curMax);
+            }else if(!Utils.morningAndEveningShifts(curWorkId)){
+                // 如果走到这里说明这一班是早晚班
+                dfsSortCourseJunior(curWorkId + 1 , curMax );
             }else{
-                // 今天没有班且 ， 且 还有班可以值
-                if(Utils.fullShift(Course.Junior.get(curWorkId).get(j)) && checkTodayHasWork(Course.Junior.get(curWorkId).get(j) , curWorkId)){
+                // 今天没有班且 ， 且 还有班可以值 且 没有同一个班的人
+                if(Utils.fullShift(Course.Junior.get(curWorkId).get(j)) && checkTodayHasWork(Course.Junior.get(curWorkId).get(j) , curWorkId) && Utils.sameProfessionalClass(Course.Junior.get(curWorkId).get(j) , curWorkId)){
                     // 安排进去 , 值班数减去 1
                     tmpEverySophomoreWork.put(curWorkId ,Course.Junior.get(curWorkId).get(j) );
                     Utils.theNumberOfShiftsMinusOne(Course.Junior.get(curWorkId).get(j));
@@ -267,7 +285,6 @@ public class CourseServiceImpl implements CourseService {
                     Utils.theNumberOfShiftsUpOne(Course.Junior.get(curWorkId).get(j));
                 }
                 dfsSortCourseJunior(curWorkId + 1 , curMax);
-
             }
         }
     }
@@ -309,6 +326,18 @@ public void scheduleJuniorYear(){
             for(int i = 0 , j = 0 ; i < everyWorkNames.size() &&
                     j < Course.getWorkMappingStaffNumber.get(workId) -
                             Course.getCourseMappingStaff.getOrDefault(workId, Collections.emptyList()).size(); i++){
+                // 大三的特判
+                if(Course.allPeopleInfo.get(everyWorkNames.get(i)).getGrade() == 3){
+
+                    if(!Utils.morningAndEveningShifts(workId))continue;
+                    if(Utils.fullShift(everyWorkNames.get(i)) && Utils.checkTodayHasWork(everyWorkNames.get(i) , workId) &&
+                            Utils.sameProfessionalClass(everyWorkNames.get(i) , workId)){
+                        Utils.addGetCourseMappingStaff(workId , everyWorkNames.get(i));
+                        j++;
+                    }
+                    continue;
+                }
+
                 // 如果没有课并且今天没有班并且这一班没有同班的人就可以安排班
                 if(Utils.fullShift(everyWorkNames.get(i)) && Utils.checkTodayHasWork(everyWorkNames.get(i) , workId) &&
                     Utils.sameProfessionalClass(everyWorkNames.get(i) , workId)){
@@ -341,14 +370,29 @@ public void scheduleJuniorYear(){
                 if( !Utils.fullShift(name))break;
                 // 先安排班没安排满的人
                 if(Course.getWorkMappingStaffNumber.get(staff.getFreeTime().get(i)) - Course.getCourseMappingStaff.get(staff.getFreeTime().get(i)).size() <= 0)continue;
+                // 如果是大三的，且是早晚班直接跳过
+                if(Course.allPeopleInfo.get(name).getGrade() == 3 && !Utils.morningAndEveningShifts(staff.getFreeTime().get(i)))continue;
                 // 今天是否有班 && 是否有相同班级的人
-                if(Utils.checkTodayHasWork(name , staff.getFreeTime().get(i)) && Utils.sameProfessionalClass(name , staff.getFreeTime().get(i))){
+                if(Utils.fullShift(name) && Utils.checkTodayHasWork(name , staff.getFreeTime().get(i)) && Utils.sameProfessionalClass(name , staff.getFreeTime().get(i))){
                     Utils.addGetCourseMappingStaff(staff.getFreeTime().get(i) , name);
                 }
             }
             // 如果还没安排满，说明每一个班都是满人的 ， 只能随机插到满人班中去了
+            if(!Utils.fullShift(name))continue;
             Random random = new Random();
             while(Utils.fullShift(staff.getName())){
+
+                if(Course.allPeopleInfo.get(name).getGrade() == 3){
+                    int randomWorkId = random.nextInt(staff.getFreeTime().size());
+                    // 检查是不是早晚班
+                    if(!Utils.morningAndEveningShifts(staff.getFreeTime().get(randomWorkId)))continue;
+                    // 今天是否有班 && 是否有相同班级的人
+                    if(Utils.checkTodayHasWork(name , staff.getFreeTime().get(randomWorkId)) && Utils.sameProfessionalClass(name , staff.getFreeTime().get(randomWorkId))){
+                        Utils.addGetCourseMappingStaff(staff.getFreeTime().get(randomWorkId) , name);
+                    }
+                    continue;
+                }
+
                 int randomWorkId = random.nextInt(staff.getFreeTime().size());
                 // 今天是否有班 && 是否有相同班级的人
                 if(Utils.checkTodayHasWork(name , staff.getFreeTime().get(randomWorkId)) && Utils.sameProfessionalClass(name , staff.getFreeTime().get(randomWorkId))){
@@ -359,57 +403,59 @@ public void scheduleJuniorYear(){
     }
 
     /*
-    *   将结果写入Excel表格中
+    *   将结果显示出来
     * */
-    public void writeForExcelAsResult() throws IOException {
-
-        String writeFileName = "C:\\Users\\Administrator\\Desktop\\值班表.xlsx";
-        FileInputStream fis = new FileInputStream(writeFileName);
-
-        //1.创建一个工作簿
-        Workbook workbook = new XSSFWorkbook(fis);
-
-        //获取工作表
-        Sheet sheet1 = workbook.getSheet("Sheet1");
-
+    public void displayResult(){
 
         for(Map.Entry<Integer , List<String>> entry : Course.getCourseMappingStaff.entrySet()){
             int workId = entry.getKey();
+            List<String> names = entry.getValue();
 
-            if(workId % 7 == 5 || workId % 7 == 6)continue;
+            StringBuilder sb = new StringBuilder();
 
-            int row = workId / 7 ;
-            int col = workId % 7 ;
-            //通过行下标和列下标返回cell对象，getRow行标,getCell列标
-            Cell cell =  sheet1.getRow(row).getCell(col);
+            for(int i = 0 ; i < names.size() ; i++ ){
+                sb.append(names.get(i));
+                if(i != names.size() - 1 ){
+                    sb.append(' ');
+                }
+            }
 
-            cell.setCellValue(entry.getValue().toString().substring(1 , entry.getValue().toString().length() - 1 ));
-
-            FileOutputStream fos = new FileOutputStream(writeFileName);
-
-            workbook.write(fos);
-
-            fos.close();
+            System.out.println( "星期 " + (workId % 7 + 1 ) + " 第 " + (workId / 7 + 1 ) + " 班值班的有 : " + sb);
         }
 
+    }
 
-        //写入
-        fis.close();
+    /*
+    *   检查是不是所有人已经安排完了 , 如果显示的不是 '已经全部安排完了' ， 说明有人的时间太紧张了，需要手动进行
+    * */
+
+    public void displaysInformationThatIsNotScheduledLeft(){
+
+        boolean isflag = true;
+        List<String> names = new ArrayList<>();
+        for(Map.Entry<String , Staff> entry : Course.allPeopleInfo.entrySet()){
+
+            if(Utils.fullShift(entry.getKey())){
+                isflag = false;
+                names.add(entry.getKey());
+            }
+
+        }
+        if(!isflag){
+            System.out.println(names);
+        }else{
+            System.out.println( " 已经全部安排完了 ");
+        }
+
 
     }
     @PostConstruct
     private void initStaff(){
-        List<Staff> staffs = staffMapper.selectList();
-
-
         for(int i = 0 , j = 5 , k = 6  ; i < 35 ; i++ , j += 7 , k += 7){
-            // 每一班初始化是五个人
-
+            // 每一班初始化是4个人
             if(i % 7 == 5 || i % 7 == 6 )continue;
-            Course.getWorkMappingStaffNumber.put( i , 5 );
+            Course.getWorkMappingStaffNumber.put( i , 4 );
 
-//            if( j <= 33 )Course.weekDay.put(j , 4 );
-//            if( k <= 34 )Course.weekDay.put(k , 4 );
         }
     }
     private  HashMap<Integer , Integer> initDayMapping(){

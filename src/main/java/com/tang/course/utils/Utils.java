@@ -84,7 +84,6 @@ public class Utils {
         List<String> names = Course.getCourseMappingStaff.get(workId);
         names.add(name);
         theNumberOfShiftsMinusOne(name);
-//        System.out.println(Course.allPeopleInfo.get(name));
     }
 
     /*
@@ -127,6 +126,15 @@ public class Utils {
         for(int i = 0 ; i < names.size() ; i++ ){
             if(Course.allPeopleInfo.get(name).getSubject().equals(names.get(i)))return false;
         }
+        return true;
+    }
+
+    /*
+    *   大三不值早晚班，判断这一班是否是早晚班
+    * */
+
+    public static boolean morningAndEveningShifts(int workId){
+        if(workId / 7 == 0 || workId / 7 == 4)return false;
         return true;
     }
 }

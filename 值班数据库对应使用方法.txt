@@ -1,0 +1,16 @@
+-- 查询某一个人的具体信息，这个需要你自己看 ， 可能会有名字相同的人，但是出现在相同专业相同班的人几率很小 , 只需要改名字就可以查询了
+-- SELECT * FROM `dept_staff` where `name` = '汤付伟' ;
+
+
+-- 每过当有人退出部门的时候,需要你把退出部门的人删掉 ,只需要在 '' 里面填写 , 把这个注释打开就可以填写了
+-- DELETE FROM `dept_staff` where `name` = '汤付伟' AND id = '';
+
+-- 你要对换专业的同学信息进行修改
+-- UPDATE `dept_staff` SET `subject` = '' WHERE `name` = '' AND id = '';
+
+-- 现在每过一个学年你就要对数据库进行更改 ， 大二的人升大三
+-- UPDATE `dept_staff` SET grade = grade - 1 ;
+
+-- 大三的人变成只值一班
+-- UPDATE `dept_staff` SET countWork = 1 WHERE grade = 3;
+
